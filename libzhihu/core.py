@@ -990,12 +990,34 @@ class Answer:
         aid = elem['data-aid']
         ctime = int(elem['data-created'])
         try:
-            author_token = elem.find("h3", class_="zm-item-answer-author-wrap").find("a", class_="zm-item-link-avatar")['href'].split("/")[-1]
+            el = elem.find("h3", class_="zm-item-answer-author-wrap")
+            if re.sub("^\n+|\n+$", "", el.get_text() ) == u"匿名用户":
+                author_token = u"匿名用户"
+            else:
+                author_token = el.find("a", class_="zm-item-link-avatar")['href'].split("/")[-1]
         except Exception as e:
             Logging.error(u"解析作者 TOKEN 出错")
             Logging.debug(e)
             Logging.debug(elem.find("div", class_="answer-head"))
             author_token = ""
+            """
+                解析出错，应该是 匿名用户的原因.
+                <div class="answer-head">
+                    <div class="zm-item-answer-author-info">
+                        <a class="collapse meta-item zg-right" href="javascript:;" name="collapse"><i class="z-icon-fold"></i>收起</a>
+                        <h3 class="zm-item-answer-author-wrap">匿名用户</h3>
+                    </div>
+                    <div class="zm-item-vote-info " data-votecount="1">
+                        <span class="voters">
+                            <span class="user-block">
+                                <a class="zg-link" data-tip="p$t$hao-lu-ba-80" href="http://www.zhihu.com/people/hao-lu-ba-80" title="郝绿坝">郝绿坝</a>
+                            </span>
+                        </span>
+                        <span>赞同</span>
+                    </div>
+                </div>
+
+            """
 
         # voters_num = int(elem.find("div", class_="zm-votebar").find("button", class_="up").find("span", class_="count").string)
         voters = self._fetch_voters(aid)
