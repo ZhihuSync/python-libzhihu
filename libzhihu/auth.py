@@ -10,7 +10,8 @@ import requests, termcolor
 
 
 requests = requests.Session()
-requests.cookies = cookielib.LWPCookieJar('.cookies')
+cookies = os.path.join(os.path.join( os.environ['HOME'], '.zhihu'), "cookies")
+requests.cookies = cookielib.LWPCookieJar( cookies )
 try:
     requests.cookies.load(ignore_discard=True)
 except:
@@ -190,9 +191,6 @@ def read_account_from_config_file(config_file="config.ini"):
     else:
         Logging.error(u"配置文件加载失败！")
         return (None, None)
-
-    
-    
 
 def login(account=None, password=None):
     if islogin() == True:

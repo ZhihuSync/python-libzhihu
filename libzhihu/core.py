@@ -7,6 +7,7 @@ import re, json, cookielib
 
 # requirements
 import requests, termcolor, html2text
+import requests_cache
 try:
     from bs4 import BeautifulSoup
 except:
@@ -22,8 +23,14 @@ from auth import Logging
         2. 身份信息保存在当前目录的 `.cookies` 文件中。
         3. `requests` 对象可以直接使用，身份信息已经自动加载。
 """
+
+cookies = os.path.join(os.path.join( os.environ['HOME'], '.zhihu'), "cookies")
+cache_db = os.path.join(os.path.join( os.environ['HOME'], '.zhihu'), "cache.db")
+
+# requests_cache.install_cache( cache_db )
+
 requests = requests.Session()
-requests.cookies = cookielib.LWPCookieJar('.cookies')
+requests.cookies = cookielib.LWPCookieJar( cookies )
 try:
     requests.cookies.load(ignore_discard=True)
 except:
@@ -121,8 +128,8 @@ class People:
                         <a target="_blank" href="/people/huangdoc/asks" class="zg-link-gray-normal">17 提问</a> / 
                         <a target="_blank" href="/people/huangdoc/answers" class="zg-link-gray-normal">23 回答</a> / 
                         <a target="_blank" href="/people/huangdoc" class="zg-link-gray-normal">8 赞同</a> 
-                    </div> 
-                </div> 
+                    </div>
+                </div>
             </div>
         """
         offset = 0
@@ -460,7 +467,6 @@ class Question:
     def sync(self):
         pass
     def _fetch_followers(self):
-        # return True
         url = "http://www.zhihu.com/question/%s/followers" % self.token
         offset = 0
         xsrf   = ""
@@ -530,7 +536,9 @@ class Question:
                     print e
                     break
             else:
-                raise IOError("network error.")
+                Logging.error(u"HTTP CODE 不为 200.")
+                Logging.debug(r.content)
+                # raise IOError("network error.")
         return followers
     def _fetch_answers(self, total):
         # 获取所有的 问题答案
@@ -773,6 +781,12 @@ class Question:
         print u"\t浏览次数: %d" % visit_times
         print u"\t相关话题关注者人数: %d" % RT_for_CN
         print u"\t最后修改时间: %s" % utime_string
+
+        # DEBUG
+        for atoken in answers:
+            A = Answer(question_token=self.token, answer_token=atoken)
+            A.pull()
+            A.parse()
     @staticmethod
     def search(keywords):
         return Search.question(keywords)
@@ -782,15 +796,222 @@ class Answer:
         答案
     """
     def __init__(self, question_token=None, answer_token=None):
-        self.question_token = question_token
-        self.answer_token = answer_token
+        self.question_token = str(question_token)
+        self.answer_token = str(answer_token)
+        self.html = ""
     def pull(self):
-        pass
+        url = "http://www.zhihu.com/question/%s/answer/%s" %( self.question_token, self.answer_token )
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
     def sync(self):
         pass
-    @classmethod
-    def parser(self, html):
-        DOM = BeautifulSoup(html)
+    def _fetch_voters(self, aid):
+        # 获取该答案的赞同人员，反对人员名单则不显示
+        url = "http://www.zhihu.com/answer/%s/voters_profile" %(str(aid))
+        # total=627&offset=10&follows=VzkPlUR84mpoyZY53UYio7cCnUgG
+        # Note: follows 代码携带在上次的请求响应数据里面
+        """
+            {
+                "paging": {
+                    "total": 628, 
+                    "next": ""   # 如果为空 则代表没有下一页, 否则应该返回的是这样的 URI: /answer/22511343/voters_profile?total=628&offset=620&follows=7r8vFgMT1QmkVDoPV6FZX4ac-NFP
+                }, 
+                "code": 0, 
+                "payload": [
+                    ""
+                    <div class="zm-profile-card clearfix no-hovercard"> 
+                        <div class="zg-right"> 
+                            <button data-follow="m:button" data-id="7b2882fdb3b60897b593664361e852fb" class="zg-btn zg-btn-follow zm-rich-follow-btn small nth-0">关注她</button> 
+                        </div> 
+                        <a title="段NaN" data-tip="p$t$duannan" class="zm-item-link-avatar" target="_blank" href="/people/duannan"> 
+                            <img src="https://pic2.zhimg.com/f32c7f335_m.jpg" class="zm-item-img-avatar"> 
+                        </a> 
+                        <div class="body"> 
+                            <div class="author ellipsis"> 
+                                <a data-tip="p$t$duannan" href="http://www.zhihu.com/people/duannan" target="_blank" class="zg-link" title="段NaN">段NaN</a> 
+                                <span class="bio hidden-phone">早起特困户@.@</span> 
+                            </div> 
+                            <ul class="status"> 
+                                <li><span>31 赞同</span></li> 
+                                <li><span>6 感谢</span></li> 
+                                <li class="hidden-phone">
+                                    <a href="/people/duannan/asks" target="_blank">0 提问</a>
+                                </li> 
+                                <li class="hidden-phone">
+                                    <a href="/people/duannan/answers" target="_blank">8 回答</a>
+                                </li> 
+                            </ul> 
+                        </div> 
+                    </div>
+                    ""
+                ], 
+                "success": true
+            }
+        """
+        has_next = True
+        Logging.info(u"获取答案的赞同人员列表")
+        
+        users = []
+        
+        while has_next:
+            r = requests.get(url)
+            Logging.info(u"请求页面: %s" % url)
+
+            if r.status_code != 200:
+                raise IOError(u"network error.")
+            try:
+                body = json.loads(r.content)
+                assert body['code'] == 0
+
+            except Exception as e:
+                Logging.error(u"数据格式错误")
+                Logging.debug(e)
+            for p in body['payload']:
+                # print p
+                # sys.exit()
+                people_token = re.compile(r"\/people\/(\S+)\"|\'", re.DOTALL).findall(p)[0]
+                try:
+                    people_id = re.compile(r"data-id=.(\w+).", re.DOTALL).findall(p)[0]
+                except Exception as e:
+                    Logging.error(u"解析 作者编号出错！")
+                    Logging.debug(e)
+                    # Logging.debug(p)
+                    people_id = ""
+
+                users.append({"token": people_token, "id": people_id})
+            if body['paging']['next'] == "":
+                has_next = False
+            else:
+                url = "http://www.zhihu.com" + body['paging']['next']
+        return users
+
+    def _fetch_comments(self, aid):
+        # 获取该答案的评论
+        url = "http://www.zhihu.com/node/AnswerCommentBoxV2"
+        params = {"answer_id": aid, "load_all": True}
+
+        Logging.info(u"获取答案评论")
+        Logging.info(url)
+        Logging.info(json.dumps(params))
+
+        r = requests.get(url, params={"params": json.dumps(params)})
+
+        if r.status_code != 200:
+            raise IOError(u"network error")
+
+        soup = BeautifulSoup(r.content, 'html.parser')
+        # DOM = soup.find("div", class_="zm-comment-list")
+        elems = soup.find_all("div", class_="zm-item-comment")
+        """
+        <div class="zm-comment-list">
+            <div class="zm-item-comment" data-id="98953481">
+                <a class="zg-anchor-hidden" name="comment-98953481"></a>
+                <a title="赵健" data-tip="p$t$zhao-jian-65" class="zm-item-link-avatar" href="/people/zhao-jian-65">
+                    <img src="https://pic2.zhimg.com/9f4c3e0b5_s.jpg" class="zm-item-img-avatar">
+                </a>
+                <div class="zm-comment-content-wrap">
+                    <div class="zm-comment-hd">
+                        <a data-tip="p$t$zhao-jian-65" href="http://www.zhihu.com/people/zhao-jian-65" class="zg-link" title="赵健">赵健</a>
+                    </div>
+                    <div class="zm-comment-content">
+                        我只知道运输都是抓幼崽，没想到看起来这么的。。。。。残忍
+                    </div>
+                    <div class="zm-comment-ft">
+                        <span class="date">2015-10-15</span>
+                        <a href="#" class="reply zm-comment-op-link" name="reply_comment">
+                            <i class="zg-icon zg-icon-comment-reply"></i>回复
+                        </a>
+                        <a href="#" class="like zm-comment-op-link " name="like_comment">
+                            <i class="zg-icon zg-icon-comment-like"></i>赞
+                        </a>
+                        <span class="like-num  nil" data-tip="s$r$0 人觉得这个很赞">
+                            <em>0</em> <span>赞</span>
+                        </span>
+                        <a href="#" 
+                            name="report" 
+                            class="report zm-comment-op-link needsfocus goog-inline-block goog-menu-button" 
+                            role="button" aria-expanded="false" tabindex="0" aria-haspopup="true" 
+                            style="-webkit-user-select: none;">
+                                <div class="goog-inline-block goog-menu-button-outer-box">
+                                    <div class="goog-inline-block goog-menu-button-inner-box">
+                                        <div class="goog-inline-block goog-menu-button-caption">
+                                            <i class="zg-icon z-icon-no-help"></i>举报
+                                        </div>
+                                        <div class="goog-inline-block goog-menu-button-dropdown">&nbsp;</div>
+                                    </div>
+                                </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+        if elems == None: elems = []
+
+        comments = []
+
+        for elem in elems:
+            comment_id = elem['data-id']
+            author_token = elem.find("div", class_="zm-comment-hd").find("a", class_="zg-link")['href'].split("/")[-1]
+            author_name = elem.find("div", class_="zm-comment-hd").find("a", class_="zg-link")['title']
+
+            content = elem.find("div", class_="zm-comment-content").get_text()
+            content = re.sub("^\n+|\n+$", "", content)
+
+            comments.append(  {"id": comment_id, "people":{"token": author_token, "name": author_name}, "content": content } )
+        return comments
+
+    def parse(self):
+        DOM = BeautifulSoup(self.html, 'html.parser')
+        elem = DOM.find("div", class_="zh-question-answer-wrapper").find("div", class_="zm-item-answer")
+        """
+            <div tabindex="-1" 
+                class="zm-item-answer" itemscope="" itemtype="http://schema.org/Answer" 
+                data-aid="22511343" 
+                data-qtoken="31272454" 
+                data-author="Jess" 
+                data-atoken="67732326" 
+                data-collapsed="0" 
+                data-created="1444820403" 
+                data-deleted="0" 
+                data-helpful="1" 
+                data-isowner="0" 
+                data-copyable="1">
+                    <a class="zg-anchor-hidden" name="answer-22511343"></a>
+                    ......
+            </div>
+        """
+        aid = elem['data-aid']
+        ctime = int(elem['data-created'])
+        try:
+            author_token = elem.find("h3", class_="zm-item-answer-author-wrap").find("a", class_="zm-item-link-avatar")['href'].split("/")[-1]
+        except Exception as e:
+            Logging.error(u"解析作者 TOKEN 出错")
+            Logging.debug(e)
+            Logging.debug(elem.find("div", class_="answer-head"))
+            author_token = ""
+
+        # voters_num = int(elem.find("div", class_="zm-votebar").find("button", class_="up").find("span", class_="count").string)
+        voters = self._fetch_voters(aid)
+
+        content = elem.find("div", class_="zm-item-rich-text")
+
+        comments = self._fetch_comments(aid)
+
+
+        print u"问题Token: %s" %self.question_token
+        print u"答案Token: %s (ID: %s ) " % (self.answer_token, str(aid))
+        print u"作者Token: %s" % author_token
+        print u"回答时间: %d " % ctime
+        print u"赞同人员: \n\t", voters
+        print u"答案正文: \n\t", content
+        print u"答案评论: \n\t", comments
 
     @staticmethod
     def search(keywords):
@@ -890,7 +1111,9 @@ class Siri:
 
 
 def test_question():
-    token = "35564122"
+    # token = "35564122"
+    token = "31272454"
+    token = "31272454"
     q = Question(token=token)
     q.pull()
     q.parse()
@@ -902,9 +1125,8 @@ def test_people():
     p.parse()
 
 def test():
-    # test_question()
-    test_people()
+    test_question()
+    # test_people()
 
 if __name__ == '__main__':
-    # test()
-    pass
+    test()
