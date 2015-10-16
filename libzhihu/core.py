@@ -352,90 +352,7 @@ class People:
     def export(self):
         pass
 
-class Inbox:
-    def __init__(self):
-        self.inbox = []
-        self.pull()
-    def pull(self):
-        url = "http://www.zhihu.com/inbox"
 
-    def sync(self):
-        pass
-    def parser(self, html):
-        pass
-    def export(self, format="rst"):
-        pass
-
-class Message:
-    def __init__(self, token=None):
-        self.token = token
-    def pull(self):
-        pass
-    def sync(self):
-        pass
-    def parser(self):
-        pass
-    def export(self, format="rst"):
-        pass
-    @staticmethod
-    def search(keywords):
-        return Search.people(keywords)
-
-
-class Explore:
-    """
-        发现新话题
-    """
-    def __init__(self):
-        self.answers = []
-        self.questions = []
-    @staticmethod
-    def pull(period="day", offset=0, size=10, limit=1):
-        result = []
-        if type(period) != type("") or period not in ["day", "week"]: return result
-        if type(offset) != type(1) or type(size) != type(1) or type(limit) != type(1):
-            return result
-
-        if limit < 1: return result
-        elif int(limit) == 1:
-            # url = "http://www.zhihu.com/explore"
-            url = "http://www.zhihu.com/node/ExploreAnswerListV2"
-            params = {"params": json.dumps({"offset": offset,"type": period}) }
-            res = requests.get(url, params=params)
-            # parse ...
-            return [res]
-        else:
-            for i in range(limit):
-                map(lambda r: result.append(r), Explore.pull(period=period, offset=offset+1, size=size, limit=1) )
-            return result
-
-    @staticmethod
-    def render(result):
-        pass
-    @staticmethod
-    def export(result=[], format="rst"):
-        pass
-
-
-class Topic:
-    """
-        话题
-
-    """
-    def __init__(self, token=None):
-        self.token = str(token)
-    def pull(self):
-        url = "http://www.zhihu.com/topic/%s" % self.token
-
-    def sync(self):
-        pass
-    def parser(self, html):
-        pass
-    def export(self, format="rst"):
-        pass
-    @staticmethod
-    def search(keywords):
-        return Search.topic(keywords)
 
 class Question:
     """
@@ -1038,6 +955,91 @@ class Answer:
     @staticmethod
     def search(keywords):
         return []
+
+class Inbox:
+    def __init__(self):
+        self.inbox = []
+        self.pull()
+    def pull(self):
+        url = "http://www.zhihu.com/inbox"
+
+    def sync(self):
+        pass
+    def parser(self, html):
+        pass
+    def export(self, format="rst"):
+        pass
+
+class Message:
+    def __init__(self, token=None):
+        self.token = token
+    def pull(self):
+        pass
+    def sync(self):
+        pass
+    def parser(self):
+        pass
+    def export(self, format="rst"):
+        pass
+    @staticmethod
+    def search(keywords):
+        return Search.people(keywords)
+
+
+class Explore:
+    """
+        发现新话题
+    """
+    def __init__(self):
+        self.answers = []
+        self.questions = []
+    @staticmethod
+    def pull(period="day", offset=0, size=10, limit=1):
+        result = []
+        if type(period) != type("") or period not in ["day", "week"]: return result
+        if type(offset) != type(1) or type(size) != type(1) or type(limit) != type(1):
+            return result
+
+        if limit < 1: return result
+        elif int(limit) == 1:
+            # url = "http://www.zhihu.com/explore"
+            url = "http://www.zhihu.com/node/ExploreAnswerListV2"
+            params = {"params": json.dumps({"offset": offset,"type": period}) }
+            res = requests.get(url, params=params)
+            # parse ...
+            return [res]
+        else:
+            for i in range(limit):
+                map(lambda r: result.append(r), Explore.pull(period=period, offset=offset+1, size=size, limit=1) )
+            return result
+
+    @staticmethod
+    def render(result):
+        pass
+    @staticmethod
+    def export(result=[], format="rst"):
+        pass
+
+
+class Topic:
+    """
+        话题
+
+    """
+    def __init__(self, token=None):
+        self.token = str(token)
+    def pull(self):
+        url = "http://www.zhihu.com/topic/%s" % self.token
+
+    def sync(self):
+        pass
+    def parser(self, html):
+        pass
+    def export(self, format="rst"):
+        pass
+    @staticmethod
+    def search(keywords):
+        return Search.topic(keywords)
 
 
 class Search:
