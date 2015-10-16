@@ -956,6 +956,237 @@ class Answer:
     def search(keywords):
         return []
 
+
+
+class Topic:
+    """
+        话题
+
+    """
+    def __init__(self, token=None):
+        self.token = str(token)
+    def pull(self):
+        url = "http://www.zhihu.com/topic/%s" % self.token
+
+    def sync(self):
+        pass
+    def parser(self, html):
+        pass
+    def export(self, format="rst"):
+        pass
+    @staticmethod
+    def search(keywords):
+        return Search.topic(keywords)
+
+class Collection:
+    """
+        收藏
+    """
+    def __init__(self, token=None):
+        self.token = token
+
+    def pull(self):
+        url = "http://www.zhihu.com/collection/%s" % self.token
+
+    def parse(self):
+        pass
+
+class RoundTable:
+    """
+        圆桌
+    """
+    def __init__(self):
+        pass
+    def parse(self):
+        pass
+
+class Explore:
+    """
+        发现新话题
+    """
+    def __init__(self):
+        self.html = ""
+
+    def pull(self):
+        url = "http://www.zhihu.com/explore"
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
+    def _fetch_questions(self):
+        # 下载推荐问题列表
+        url = "http://www.zhihu.com/node/ExploreAnswerListV2"
+        offset = 0
+    
+        has_next = True
+        questions = []
+
+        while has_next:
+            params = {"offset": offset,"type":"day"}
+            
+            Logging.info(u"正在下载推荐问题列表: %s" % json.dumps(params) )
+
+            r = requests.get(url, params={"params": json.dumps(params)})
+            if r.status_code != 200:
+                raise IOError(u"network error.")
+            try:
+                DOM = BeautifulSoup(r.content, 'html.parser')
+                items = DOM.find_all("div", class_="explore-feed")
+                if items == None or len(items) == 0:
+                    items = []
+                    has_next = False
+                for q in items:
+                    try:
+                        qlink = q.find("a", class_="question_link")['href']
+                        qtoken = re.compile(r"\/question\/(\d+)\/", re.DOTALL).findall( qlink )[0]
+
+                        questions.append( qtoken )
+
+                    except Exception as e:
+                        Logging.error(u"问题解析失败")
+                        Logging.debug(e)
+                        Logging.debug(q)
+            except Exception as e:
+                Logging.error(u"推荐问题列表解析失败")
+                Logging.debug(e)
+                Logging.debug(r.content)
+                items = []
+                has_next = False
+            offset += len(items)
+        return questions
+
+    def _fetch_hot_favlists(self):
+        # 热门收藏
+        url = "http://www.zhihu.com/node/ExploreHotFavlistsInnerV2"
+        offset = 0
+            
+        favs = []
+
+        while True:
+            """
+                NOTE: 这个可以无限 请求下去，需要考虑限制条件。暂且不启用该功能。
+            """
+            if offset == 10:
+                Logging.warn(u"收藏列表目前最多只换十批数据！")
+                break
+            params = {"offset": offset}
+
+            Logging.info(u"下载热门收藏列表: %s" % json.dumps(params) )
+
+            r = requests.get(url, params={"params": json.dumps(params) })
+            if r.status_code != 200:
+                Logging.warn(u"状态码不为200")
+                Logging.warn(r.content)
+                r.content = ""
+            try:
+                DOM = BeautifulSoup(r.content, "html.parser")
+                items = DOM.find_all("li")
+                if items == None or len(items) == 0: items = []
+                for c in items:
+                    """
+                        <li>
+                            <div class="content">
+                                <a href="/collection/20320737" target="_blank">科普&amp;归纳</a>
+                                <div class="meta">
+                                    <span>273 人关注</span>
+                                    <span class="zg-bull">&bull;</span>
+                                    <span>76 个回答</span>
+                                </div>
+                            </div>
+                        </li>
+                    """
+                    _el = c.find("div", class_="content").find("a")
+                    _token = _el['href'].split("/")[-1]
+                    _name = re.sub("^\n+|\n+$", "", _el.string)
+
+                    favs.append( {"token": _token, "name": _name} )
+
+            except Exception as e:
+                Logging.error(u"热门收藏列表解析失败")
+                Logging.debug(e)
+                Logging.debug(r.content)
+
+            offset += 1
+
+        return favs
+
+    def parse(self):
+
+        DOM = BeautifulSoup(self.html, 'html.parser')
+        # 热门问题
+        questions = self._fetch_questions()
+        
+        sidebar = DOM.find("div", class_="zu-main-sidebar")
+
+        # 热门圆桌
+        roundtables = []
+        roundtables_elems = sidebar.find("ul", class_="hot-roundtables").find_all("li")
+        for el in roundtables_elems:
+            """
+                <li class="clearfix">
+                    <a target="_blank" class="avatar-link" href="/roundtable/nobelprize2015">
+                        <img src="https://pic1.zhimg.com/89b894a0aa0c5549f4d6699077b5e608_m.png" alt="Path" class="avatar 40" />
+                    </a>
+                    <div class="content">
+                        <a href="/roundtable/nobelprize2015" target="_blank" data-tip="r$b$nobelprize2015">诺贝尔奖巡礼</a>
+                        <div class="meta">
+                            <span>4673 人关注</span>
+                            <span class="zg-bull">•</span>
+                            <span>52 个问题</span>
+                        </div>
+                    </div>
+                </li>
+            """
+            _el = el.find("div", class_="content").find("a")
+            _token = _el['href'].split("/")[-1]
+            _name = re.sub("^\n+|\n+$", "", _el.string)
+            
+            roundtables.append( {"token": _token, "name": _name} )
+
+        # 热门话题
+        topics = []
+        topics_elems = sidebar.find("ul", class_="hot-topics").find_all("li")
+        for el in topics_elems:
+            """
+                <li class="clearfix">
+                    <a target="_blank" class="avatar-link" href="/topic/19555662" data-tip="t$b$19555662">
+                        <img src="https://pic3.zhimg.com/9780e0f8dbcfd240f76d22916b59bd36_m.png" alt="创业融资" class="avatar 40">
+                    </a>
+                    <div class="content">
+                        <a href="/topic/19555662" target="_blank" data-tip="t$b$19555662">创业融资</a>
+                        <div class="meta">
+                            <span>31986 人关注</span>
+                        </div>
+                    </div>
+                    <div class="bottom">
+                        <a class="question_link" target="_blank" href="/question/36423536">
+                            投资人投资初创公司的投资方式有哪几种？实际中都是根据什么原则去选择的？
+                        </a>
+                    </div>
+                </li>
+            """
+            _el = el.find("div", class_="content").find("a")
+            _token = _el['href'].split("/")[-1]
+            _name = re.sub("^\n+|\n+$", "", _el.string)
+            
+            topics.append( {"token": _token, "name": _name} )
+
+        # 热门收藏
+        hot_collections = self._fetch_hot_favlists()
+
+        
+        print questions
+        print roundtables
+        print topics
+        print hot_collections
+
+    def export(self, result=[], format="rst"):
+        pass
+
 class Inbox:
     def __init__(self):
         self.inbox = []
@@ -985,61 +1216,6 @@ class Message:
     def search(keywords):
         return Search.people(keywords)
 
-
-class Explore:
-    """
-        发现新话题
-    """
-    def __init__(self):
-        self.answers = []
-        self.questions = []
-    @staticmethod
-    def pull(period="day", offset=0, size=10, limit=1):
-        result = []
-        if type(period) != type("") or period not in ["day", "week"]: return result
-        if type(offset) != type(1) or type(size) != type(1) or type(limit) != type(1):
-            return result
-
-        if limit < 1: return result
-        elif int(limit) == 1:
-            # url = "http://www.zhihu.com/explore"
-            url = "http://www.zhihu.com/node/ExploreAnswerListV2"
-            params = {"params": json.dumps({"offset": offset,"type": period}) }
-            res = requests.get(url, params=params)
-            # parse ...
-            return [res]
-        else:
-            for i in range(limit):
-                map(lambda r: result.append(r), Explore.pull(period=period, offset=offset+1, size=size, limit=1) )
-            return result
-
-    @staticmethod
-    def render(result):
-        pass
-    @staticmethod
-    def export(result=[], format="rst"):
-        pass
-
-
-class Topic:
-    """
-        话题
-
-    """
-    def __init__(self, token=None):
-        self.token = str(token)
-    def pull(self):
-        url = "http://www.zhihu.com/topic/%s" % self.token
-
-    def sync(self):
-        pass
-    def parser(self, html):
-        pass
-    def export(self, format="rst"):
-        pass
-    @staticmethod
-    def search(keywords):
-        return Search.topic(keywords)
 
 
 class Search:
@@ -1148,9 +1324,15 @@ def test_people():
     p.pull()
     p.parse()
 
+def test_explore():
+    e = Explore()
+    e.pull()
+    e.parse()
+
 def test():
-    test_question()
+    # test_question()
     # test_people()
+    test_explore()
 
 if __name__ == '__main__':
     test()
