@@ -79,6 +79,20 @@ class People:
     """
     def __init__(self, token=None):
         self.token = token
+        """
+            Tips:
+                用户编号 直接 搜索 data-id 可以查看到，但是无法查看到当前登陆用户的 id 
+                解决办法采用没有 登陆 session 的连接去请求个人页面。
+
+                view-source:http://www.zhihu.com/people/raymond-wang
+                
+                <button 
+                    data-follow="m:button" 
+                    data-id="cfd6c460ccfe5e87a75a5410bbf0ae65" 
+                    class="zg-btn zg-btn-follow zm-rich-follow-btn">
+                        关注
+                </button>
+        """
         self.id    = 0
         self.hash_id = ""
         self.xsrf  = ""
@@ -1049,7 +1063,7 @@ class RoundTable:
         self.token = token
     def pull(self):
         url = "http://www.zhihu.com/roundtable/%s" % ( self.token )
-        
+
     def parse(self):
         pass
 
