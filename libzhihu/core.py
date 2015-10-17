@@ -956,8 +956,6 @@ class Answer:
     def search(keywords):
         return []
 
-
-
 class Topic:
     """
         话题
@@ -969,6 +967,58 @@ class Topic:
         url = "http://www.zhihu.com/topic/%s" % self.token
 
     def sync(self):
+        pass
+    def newest(self):
+        # 动态, 热门排序 | 时间排序
+
+        # 时间排序
+        url = "http://www.zhihu.com/topic/%s/newest" % ( self.token )
+        """
+            HTTP POST:
+                start:0
+                offset:1445013770.0
+                _xsrf:f11a7023d52d5a0ec95914ecff30885f
+            Note:
+
+                offset 数据携带在 请求回应结果中的 HTML DOM 中。
+
+                <div 
+                    class="feed-item feed-item-hook  folding combine" 
+                    itemprop="question" 
+                    itemscope="" 
+                    itemtype="http://schema.org/Question" 
+                    data-score="1445021798.0">
+
+                    ......
+                </div>
+        """
+
+        # 热门排序
+        url = "http://www.zhihu.com/topic/19550374/hot"
+        """
+            HTTP POST:
+                start:0
+                offset:2435.88125526
+                _xsrf:f11a7023d52d5a0ec95914ecff30885f
+            offset 数据在 响应 DOM 属性中
+
+            <div 
+                class="feed-item feed-item-hook question-item" 
+                itemprop="question" 
+                itemscope="" 
+                itemtype="http://schema.org/Question" 
+                data-score="2435.63387728" 
+                data-type="q">
+
+                ......
+            </div>
+        """
+
+    def top_answers(self):
+        # 精华
+        pass
+    def questions(self):
+        # 全部问题
         pass
     def parser(self, html):
         pass
@@ -995,8 +1045,11 @@ class RoundTable:
     """
         圆桌
     """
-    def __init__(self):
-        pass
+    def __init__(self, token=None):
+        self.token = token
+    def pull(self):
+        url = "http://www.zhihu.com/roundtable/%s" % ( self.token )
+        
     def parse(self):
         pass
 
@@ -1113,6 +1166,10 @@ class Explore:
             offset += 1
 
         return favs
+    def _fetch_topics(self):
+        # 话题广场 － 发现新话题
+        url = "http://www.zhihu.com/topics"
+
 
     def parse(self):
 
@@ -1187,34 +1244,7 @@ class Explore:
     def export(self, result=[], format="rst"):
         pass
 
-class Inbox:
-    def __init__(self):
-        self.inbox = []
-        self.pull()
-    def pull(self):
-        url = "http://www.zhihu.com/inbox"
 
-    def sync(self):
-        pass
-    def parser(self, html):
-        pass
-    def export(self, format="rst"):
-        pass
-
-class Message:
-    def __init__(self, token=None):
-        self.token = token
-    def pull(self):
-        pass
-    def sync(self):
-        pass
-    def parser(self):
-        pass
-    def export(self, format="rst"):
-        pass
-    @staticmethod
-    def search(keywords):
-        return Search.people(keywords)
 
 
 
@@ -1283,6 +1313,36 @@ class Search:
         res = requests.get(url, params={"q": keywords, "type": "topic"})
         # parse ...
         return [res]
+
+class Inbox:
+    def __init__(self):
+        self.inbox = []
+        self.pull()
+    def pull(self):
+        url = "http://www.zhihu.com/inbox"
+
+    def sync(self):
+        pass
+    def parser(self, html):
+        pass
+    def export(self, format="rst"):
+        pass
+
+class Message:
+    def __init__(self, token=None):
+        self.token = token
+    def pull(self):
+        pass
+    def sync(self):
+        pass
+    def parser(self):
+        pass
+    def export(self, format="rst"):
+        pass
+    @staticmethod
+    def search(keywords):
+        return Search.people(keywords)
+
 
 """
     WARNING: 
