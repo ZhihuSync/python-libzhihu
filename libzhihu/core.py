@@ -361,8 +361,89 @@ class People:
 
 
     @staticmethod
-    def search(keywords):
-        return Search.people(keywords)
+    def search(keywords=""):
+        url = "http://www.zhihu.com/r/search"
+        # q=%E4%BD%A0%E5%A5%BD&range=&type=question&offset=10
+        offset = 0
+
+        has_next = True
+
+        peoples = []
+
+        while has_next:
+            params = {"q": keywords, "type": "people", "offset": offset}
+
+            Logging.info(u"正在下载用户搜索结果: %s" % json.dumps(params) )
+
+            r = requests.get(url, params=params)
+            if r.status_code != 200:
+                raise IOError(u"network error.")
+            try:
+                """
+                JSON Format:
+                    {
+                        "htmls": [
+                            "<li></li>"
+                        ],
+                        "paging": {
+                            "next": "/r/search?q=%E4%BD%A0%E5%A5%BD&range=&type=question&offset=20"  # 为空则代表没有后续数据
+                        }
+                    }
+
+                HTML DOM:
+                    <li class="item item-card user-card clearfix">
+                        <div class="left content">
+                            <a href="/people/ai-ji-50-13" class="avatar-link left">
+                                <img src="https://pic1.zhimg.com/7df3fdfd64e07a4761ec5266978887a0_m.jpg" alt="埃及" class="avatar 50">
+                            </a>
+                            <div class="body">
+                                <div class="line">
+                                    <a href="/people/ai-ji-50-13" class="name-link" data-highlight>埃及</a>
+                                    <i class="icon icon-profile-female" title="她"></i>
+                                </div>
+                                <div class="line"></div>
+                            </div>
+                        </div>
+                        <div class="extra">
+                            <div class="grid clearfix">
+                                <a href="/people/ai-ji-50-13/answers" class="col"><strong>0</strong><span>回答</span></a>
+                                <a href="/people/ai-ji-50-13/posts" class="col"><strong>0</strong><span>文章</span></a>
+                                <a href="/people/ai-ji-50-13/followers" class="col"><strong>0</strong><span>关注者</span></a>
+                            </div>
+                            <button 
+                                data-follow="m:button" 
+                                class="zg-right zg-btn zg-btn-follow" 
+                                data-id="beb3486a012acc5c9d07134aeb9be6de">
+                                    关注
+                            </button>
+                        </div>
+                    </li>
+                """
+                body = json.loads(r.content)
+                items = body['htmls']
+                for q in items:
+                    try:
+                        DOM = BeautifulSoup(q, 'html.parser')
+                        name = re.sub("<.*?>", "", re.sub("^\n+|\n+$", "", DOM.find("div", class_="content").find("a", class_="name-link").get_text()) )
+                        id = DOM.find("button")['data-id']
+                        token = DOM.find("div", class_="content").find("a", class_="name-link")['href'].split("/")[-1]
+
+                        peoples.append( {"id": id, "token": token, "name": name} )
+
+                    except Exception as e:
+                        Logging.error(u"DOM解析失败")
+                        Logging.debug(e)
+                if body['paging']['next'] == "" or body['paging']['next'] == None:
+                    has_next = False
+
+                offset += len(items)
+
+            except Exception as e:
+                Logging.error(u"数据解析失败")
+                Logging.debug(e)
+
+        return peoples
+
     def export(self):
         pass
 
@@ -726,8 +807,81 @@ class Question:
             A.pull()
             A.parse()
     @staticmethod
-    def search(keywords):
-        return Search.question(keywords)
+    def search(keywords=""):
+        url = "http://www.zhihu.com/r/search"
+        # q=%E4%BD%A0%E5%A5%BD&range=&type=question&offset=10
+        offset = 0
+
+        has_next = True
+
+        questions = []
+
+        while has_next:
+            params = {"q": keywords, "range": "", "type": "question", "offset": offset}
+
+            Logging.info(u"正在下载问答搜索结果: %s" % json.dumps(params) )
+
+            r = requests.get(url, params=params)
+            if r.status_code != 200:
+                raise IOError(u"network error.")
+            try:
+                """
+                JSON Format:
+                    {
+                        "htmls": [
+                            "<li></li>"
+                        ],
+                        "paging": {
+                            "next": "/r/search?q=%E4%BD%A0%E5%A5%BD&range=&type=question&offset=20"  # 为空则代表没有后续数据
+                        }
+                    }
+
+                HTML DOM:
+                    <li class="item clearfix">
+                        <div class="title">
+                            <a target="_blank" href="/question/31516118" class="question-link">异地恋 <em>你好</em>？</a>
+                        </div>
+                        <div class="content">
+                            <meta itemprop="question-id" content="4805722">
+                            <meta itemprop="question-url-token" content="31516118">
+                            <div class="actions">
+                                <a href="#" class="action-item" data-follow="q:link" data-id="4805722">
+                                    <i class="z-icon-follow"></i>
+                                    关注问题
+                                </a>
+                                <span class="zg-bull">•</span>
+                                <a href="/question/31516118/followers" class="action-item">1 人关注</a>
+                                <span class="zg-bull">•</span>
+                                <a href="/question/31516118" class="action-item">0 个回答</a>
+                            </div>
+                        </div>
+                    </li>"
+                """
+                body = json.loads(r.content)
+                items = body['htmls']
+                for q in items:
+                    # question_token = re.compile(r"\/question\/(\d+)\"|\'", re.DOTALL).findall(q)[0]
+                    try:
+                        DOM = BeautifulSoup(q, 'html.parser')
+                        title = re.sub("<.*?>", "", re.sub("^\n+|\n+$", "", DOM.find("div", class_="title").find("a").get_text()) )
+                        id = DOM.find("meta", itemprop="question-id")['content']
+                        token = DOM.find("meta", itemprop="question-url-token")['content']
+
+                        questions.append( {"id": id, "token": token, "title": title} )
+
+                    except Exception as e:
+                        Logging.error(u"DOM解析失败")
+                        Logging.debug(e)
+                if body['paging']['next'] == "" or body['paging']['next'] == None:
+                    has_next = False
+
+                offset += len(items)
+
+            except Exception as e:
+                Logging.error(u"数据解析失败")
+                Logging.debug(e)
+
+        return questions
 
 class Answer:
     """
@@ -1052,8 +1206,80 @@ class Topic:
     def export(self, format="rst"):
         pass
     @staticmethod
-    def search(keywords):
-        return Search.topic(keywords)
+    def search(keywords=""):
+        url = "http://www.zhihu.com/r/search"
+        # q=%E4%BD%A0%E5%A5%BD&range=&type=topic&offset=10
+        offset = 0
+
+        has_next = True
+
+        topics = []
+
+        while has_next:
+            params = {"q": keywords, "type": "topic", "offset": offset}
+
+            Logging.info(u"正在下载话题搜索结果: %s" % json.dumps(params) )
+
+            r = requests.get(url, params=params)
+            if r.status_code != 200:
+                raise IOError(u"network error.")
+            try:
+                """
+                JSON Format:
+                    {
+                        "htmls": [
+                            "<li></li>"
+                        ],
+                        "paging": {
+                            "next": "/r/search?q=%E4%BD%A0%E5%A5%BD&range=&type=topic&offset=20"  # 为空则代表没有后续数据
+                        }
+                    }
+
+                HTML DOM:
+                    <li class="item clearfix">
+                        <a href="/topic/20025392" class="avatar-link hidden-phone">
+                            <img src="http://pic1.zhimg.com/e82bab09c_m.jpg" alt="你知道 X 多努力么" class="avatar 50">
+                        </a>
+                        <div class="content">
+                            <div class="name">
+                                <a href="/topic/20025392" class="name-link" data-highlight>你知道 X 多努力么</a>
+                            </div>
+                            <div class="desc"></div>
+                            <div class="meta">
+                                <button data-follow="t:button" class="zg-right zg-btn zg-btn-follow" data-id="160564">关注</button>
+                                <a class="questions" href="/topic/20025392/questions">
+                                    <i class="icon icon-bubble"></i>
+                                    6 个问题
+                                </a>
+                                <a class="followers" href="/topic/20025392/followers"><i class="icon icon-avatar"></i>1 个关注</a>
+                            </div>
+                        </div>
+                    </li>"
+                """
+                body = json.loads(r.content)
+                items = body['htmls']
+                for q in items:
+                    try:
+                        DOM = BeautifulSoup(q, 'html.parser')
+                        name = re.sub("<.*?>", "", re.sub("^\n+|\n+$", "", DOM.find("div", class_="content").find("a", class_="name-link").get_text()) )
+                        id = DOM.find("button")['data-id']
+                        token = DOM.find("div", class_="content").find("a", class_="name-link")['href'].split("/")[-1]
+
+                        topics.append( {"id": id, "token": token, "name": name} )
+
+                    except Exception as e:
+                        Logging.error(u"DOM解析失败")
+                        Logging.debug(e)
+                if body['paging']['next'] == "" or body['paging']['next'] == None:
+                    has_next = False
+
+                offset += len(items)
+
+            except Exception as e:
+                Logging.error(u"数据解析失败")
+                Logging.debug(e)
+
+        return topics
 
 class Collection:
     """
@@ -1284,62 +1510,14 @@ class Search:
     def __init__(self):
         pass
     @staticmethod
-    def people(keywords=None, offset=0, size=10, limit=1):
-        """
-            offset: 起始偏移量
-            size: 10 (不能修改)
-            limit: 最多向下几页
-        """
-        result = []
-        if type(keywords) != type(""): return result
-        if int(limit) < 1: return result
-        elif int(limit) == 1:
-            url = "http://www.zhihu.com/r/search"
-            res = requests.get(url, params={"q": keywords, "type": "people", "offset": 0})
-            # parse ...
-            def parse_result():
-                pass
-
-
-            return [res]
-        else:
-            for i in range(int(limit)):
-                map(lambda r: result.append(r), Search.people(keywords=keywords, offset=offset+i, limit=1 ) )
-            return result
+    def people(keywords=None, limit=-1):
+        return People.search(keywords=keywords)
     @staticmethod
-    def question(keywords=None, offset=0, size=10, page=1):
-        """
-            offset: 起始偏移量
-            size: 10 (不能修改)
-            page: 页数
-        """
-        size = 10
-        result = []
-        if type(keywords) != type(""): return result
-        if int(page) < 1: return result
-        elif int(page) == 1:
-            url = "http://www.zhihu.com/r/search"
-            res = requests.get(url, params={"q": keywords, "type": "question", "offset": 0})
-            # parse ...
-
-            return [res]
-        else:
-            for i in range(int(page)):
-                map(lambda r: result.append(r), Search.question(keywords=keywords, offset=page*size+offset, page=1 ) )
-            return result
+    def question(keywords=None, limit=-1):
+        return Question.search(keywords=keywords)
     @staticmethod
-    def topic(keywords=None, offset=0, size=10, limit=1):
-        """
-            Note: 
-                对于话题的搜索，似乎没有 offset, size 以及 limit 条件，按道理，这种 结构树应该是一次性返回的。
-                所以参数 offset, size 以及 limit 暂不起作用。
-        """
-        result = []
-        if type(keywords) != type(""): return result
-        url = "http://www.zhihu.com/r/search"
-        res = requests.get(url, params={"q": keywords, "type": "topic"})
-        # parse ...
-        return [res]
+    def topic(keywords=None, limit=-1):
+        return Topic.search(keywords=keywords)
 
 class Inbox:
     def __init__(self):
@@ -1416,10 +1594,24 @@ def test_explore():
     e.pull()
     e.parse()
 
+def test_search():
+    questions = Search.question(keywords="埃及")
+    for p in questions:
+        print "id: %s\t token: %s\t title: %s" % ( p['id'], p['token'], p['title'] )
+
+    peoples = Search.people(keywords="埃及")
+    for p in peoples:
+        print "id: %s\t token: %s\t name: %s" % ( p['id'], p['token'], p['name'] )
+
+    topics = Search.topic(keywords="埃及")
+    for p in topics:
+        print "id: %s\t token: %s\t name: %s" % ( p['id'], p['token'], p['name'] )
+
 def test():
     # test_question()
     # test_people()
-    test_explore()
+    # test_explore()
+    test_search()
 
 if __name__ == '__main__':
     test()
