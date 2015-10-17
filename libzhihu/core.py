@@ -85,7 +85,7 @@ class People:
                 解决办法采用没有 登陆 session 的连接去请求个人页面。
 
                 view-source:http://www.zhihu.com/people/raymond-wang
-                
+
                 <button 
                     data-follow="m:button" 
                     data-id="cfd6c460ccfe5e87a75a5410bbf0ae65" 
@@ -941,7 +941,13 @@ class Answer:
                     <div class="zm-item-vote-info " data-votecount="1">
                         <span class="voters">
                             <span class="user-block">
-                                <a class="zg-link" data-tip="p$t$hao-lu-ba-80" href="http://www.zhihu.com/people/hao-lu-ba-80" title="郝绿坝">郝绿坝</a>
+                                <a 
+                                    class="zg-link" 
+                                    data-tip="p$t$hao-lu-ba-80" 
+                                    href="http://www.zhihu.com/people/hao-lu-ba-80" 
+                                    title="郝绿坝">
+                                        郝绿坝
+                                </a>
                             </span>
                         </span>
                         <span>赞同</span>
