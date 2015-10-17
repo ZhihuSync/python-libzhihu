@@ -643,8 +643,15 @@ class Question:
         # 问题主体
         el = DOM.find("div", id="zh-question-detail")
 
+        """
+            <div id="zh-question-detail" class="zm-item-rich-text" data-resourceid="6778410" data-action="/question/detail">
+        """
         id = int(el['data-resourceid'])  # 问题资源编号, 区别于Token
         self.id = id
+
+        """
+            提问者信息 在 问题日志(http://www.zhihu.com/question/36428260/log) 里面可以查看（如果不是匿名提问的话）
+        """
         content = el.find("div", class_="zm-editable-content").get_text()
         content = re.sub("^\n+|\n+$", "", content)
 
