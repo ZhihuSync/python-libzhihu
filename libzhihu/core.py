@@ -1290,7 +1290,8 @@ class Collection:
 
     def pull(self):
         url = "http://www.zhihu.com/collection/%s" % self.token
-
+    def sync(self):
+        pass
     def parse(self):
         pass
 
@@ -1302,7 +1303,8 @@ class RoundTable:
         self.token = token
     def pull(self):
         url = "http://www.zhihu.com/roundtable/%s" % ( self.token )
-
+    def sync(self):
+        pass
     def parse(self):
         pass
 
