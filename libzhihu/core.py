@@ -1344,7 +1344,9 @@ class Collection:
                         """
                             BUG:
                                 下面的写入步骤存在 BUG, 主要是 DOM 的信息不规范引起的，需要分析后修正。
-
+                                http://www.zhihu.com/collection/20432495?page=6
+                                该页当中有一条被 和谐的 回答，这时， qid ( data-resourceid  ) 将会获取不到。
+                                
                         """
                         if this_is_one_answer:
                             items[_qid]['answers'].append( { "token": _atoken, "id": _aid, "ctime": _ctime } )
