@@ -1287,13 +1287,114 @@ class Collection:
     """
     def __init__(self, token=None):
         self.token = token
-
+        self.html  = ""
     def pull(self):
         url = "http://www.zhihu.com/collection/%s" % self.token
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
+
     def sync(self):
         pass
+    def _fetch_all_questions(self):
+
+        def fetch(page):
+            url = "http://www.zhihu.com/collection/%s" % self.token
+            res = requests.get(url, params={"page": page})
+
+            Logging.info(u"正在下载第%s页收藏数据 ..." % str(page) )
+
+            if res.status_code in [302, 301]:
+                raise IOError("network error.")
+            elif res.status_code != 200:
+                raise IOError("unknow err.or.")
+            else:
+                # res.content | res.text 
+                return res.content
+
+        def parse(html):
+            
+
+            DOM = BeautifulSoup(html, 'html.parser')
+            elems = DOM.find("div", id="zh-list-answer-wrap").find_all("div", class_="zm-item")
+
+            for elem in elems:
+                try:
+                    this_is_one_answer = False
+                    _qid = elem.find("div", class_="zm-item-rich-text")['data-resourceid']
+                    try:
+                        _elem = elem.find("h2", class_="zm-item-title").contents[0]
+                        _title = re.sub("^\n+|\n+$", "", _elem.string ) 
+                        _qtoken = _elem['href'].split("/")[-1]
+                    except:
+                        this_is_one_answer = True
+                        Logging.warn(u"这是问题的子答案")
+                    try:
+                        
+
+                        _elem2 = elem.find("div", class_="zm-item-answer")
+                        _aid = _elem2['data-aid']
+                        _atoken = _elem2['data-atoken']
+                        _ctime = _elem2['data-created']
+                        """
+                            BUG:
+                                下面的写入步骤存在 BUG, 主要是 DOM 的信息不规范引起的，需要分析后修正。
+
+                        """
+                        if this_is_one_answer:
+                            items[_qid]['answers'].append( { "token": _atoken, "id": _aid, "ctime": _ctime } )
+                        else:
+                            items[_qid] = {"token": _qtoken, "id": _qid, "title": _title, "answers": [{ "token": _atoken, "id": _aid, "ctime": _ctime }] }
+                    except Exception as e:
+                        Logging.error(u"严重异常")
+                        Logging.debug(e)
+                        Logging.debug(_elem2)
+                except Exception as e:
+                    Logging.error(u"解析错误")
+                    Logging.debug(e)
+                    Logging.debug(elem)
+            """
+                border-pager
+                <span><a href="?page=30">下一页</a></span>
+                <span class="zg-gray-normal">下一页</span>
+            """
+            pages = DOM.find("div", class_="border-pager").find("div", class_="zm-invite-pager").find_all("span")
+            next_el = pages[-1].find("a")
+            if next_el:
+                next_page = next_el['href'].split("=")[-1]
+            else:
+                next_page = 0
+
+            return next_page
+
+        html = self.html
+        items = {}
+
+        while True:
+            np = parse(html)
+            # questions += ques
+            if np == 0:
+                break
+            else:
+                html = fetch(np)
+        return items.values()
+
     def parse(self):
-        pass
+        DOM = BeautifulSoup(self.html, 'html.parser')
+        
+        questions = self._fetch_all_questions()
+
+        for q in questions:
+            print "Title: %s \t Token: %s " % ( q['title'], str(q['token']) )
+
+        # print questions
+
+
 
 class RoundTable:
     """
@@ -1303,6 +1404,14 @@ class RoundTable:
         self.token = token
     def pull(self):
         url = "http://www.zhihu.com/roundtable/%s" % ( self.token )
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
     def sync(self):
         pass
     def parse(self):
@@ -1524,13 +1633,20 @@ class Search:
 class Inbox:
     def __init__(self):
         self.inbox = []
-        self.pull()
+        self.html = ""
     def pull(self):
         url = "http://www.zhihu.com/inbox"
-
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
     def sync(self):
         pass
-    def parser(self, html):
+    def parse(self, html):
         pass
     def export(self, format="rst"):
         pass
@@ -1539,10 +1655,18 @@ class Message:
     def __init__(self, token=None):
         self.token = token
     def pull(self):
-        pass
+        url = ""
+        res = requests.get(url)
+        if res.status_code in [302, 301]:
+            raise IOError("network error.")
+        elif res.status_code != 200:
+            raise IOError("unknow err.or.")
+        else:
+            # res.content | res.text 
+            self.html = res.content
     def sync(self):
         pass
-    def parser(self):
+    def parse(self):
         pass
     def export(self, format="rst"):
         pass
@@ -1608,12 +1732,18 @@ def test_search():
     topics = Search.topic(keywords="埃及")
     for p in topics:
         print "id: %s\t token: %s\t name: %s" % ( p['id'], p['token'], p['name'] )
+def test_collection():
+    token = "20432495"
+    c = Collection(token=token)
+    c.pull()
+    c.parse()
 
 def test():
     # test_question()
     # test_people()
     # test_explore()
-    test_search()
+    # test_search()
+    test_collection()
 
 if __name__ == '__main__':
     test()
