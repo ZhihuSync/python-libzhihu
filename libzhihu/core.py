@@ -1416,8 +1416,93 @@ class RoundTable:
             self.html = res.content
     def sync(self):
         pass
+    def _fetch_questions(self):
+        url = "http://www.zhihu.com/r/roundtables/nobelprize2015/questions"
+        offset = 0
+        
+        questions = []
+
+        while True:
+            params = {"offset": offset}
+            Logging.info(u"正在下载圆桌问题 %s " %json.dumps(params) )
+
+            r = requests.get(url, params=params)
+            if r.status_code != 200:
+                Logging.warn(u"HTTP STATUS CODE: %d" % r.status_code)
+            else:
+                
+                """
+                JSON FORMAT:
+                    {
+                        "htmls": [
+                            "<li>...</li>",
+
+                        ],
+                        "paging": {
+                            "next": "/r/roundtables/nobelprize2015/questions?offset=42"  # 为空或者Null则没有下一页
+                        }
+                    }
+                DOM:
+                    <li class="item" data-type="question">
+                        <meta itemprop="question-id" content="6722361">
+                        <meta itemprop="question-url-token" content="36288118">
+                        <div class="item-header">
+                            <h3 class="item-title">
+                                <a class="link" target="_blank" href="/question/36288118">
+                                    博彩公司关于每年诺贝尔文学奖的赔率是如何计算的？
+                                </a>
+                            </h3>
+                        </div>
+                        <div class="item-footer">
+                            <ul class="item-actions">
+                                <li>
+                                    <button class="button-text follow unfollowing" data-follow="q:fi:button" data-id="6722361">
+                                        <i class="fi fi-follow"></i><span class="label">关注</span>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="button-text comment js-toggle-commentbox toggle-comment">
+                                        <i class="fi fi-comment"></i><span class="label">添加评论</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+
+                """
+                try:
+                    body = json.loads(r.content)
+                    try:
+                        for i in body['htmls']:
+                            DOM = BeautifulSoup(i, 'html.parser')
+                            qid = DOM.find("meta", itemprop="question-id")['content']
+                            qtoken = DOM.find("meta", itemprop="question-url-token")['content']
+                            qtitle = re.sub("^\n+|\n+$", "", DOM.find("h3", class_="item-title").find("a").get_text())
+
+                            questions.append( {"id": qid, "token": qtoken, "title": qtitle} )
+                        try:
+                            np = body['paging']['next']
+                        except Exception as e:
+                            np = ""
+                        if np == None or np == "":
+                            break
+                        else:
+                            # url = "http://www.zhihu.com%s" % body['paging']['next']
+                            offset += len(body['htmls'])
+                    except Exception as e:
+                        Logging.error(u"JSON数据格式错误")
+                        Logging.debug(e)
+                        Logging.debug(body)    
+                except Exception as e:
+                    Logging.error(u"JSON解析失败!")
+                    Logging.debug(e)
+                    Logging.debug(r.content)
+
+        return questions
+
     def parse(self):
-        pass
+        questions = self._fetch_questions()
+        print questions
 
 class Explore:
     """
@@ -1740,12 +1825,20 @@ def test_collection():
     c.pull()
     c.parse()
 
+def test_roundtable():
+    token = "nobelprize2015"
+    r = RoundTable(token=token)
+    r.pull()
+    r.parse()
+
+
 def test():
     # test_question()
     # test_people()
     # test_explore()
     # test_search()
-    test_collection()
+    # test_collection()
+    test_roundtable()
 
 if __name__ == '__main__':
     test()
