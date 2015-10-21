@@ -324,6 +324,16 @@ class People:
     def _fetch_logs(self, total):
         # 获取该用户 参与的 公共编辑
         pass
+    def _fetch_user_hash_id(self, token=""):
+        # 当获取当前登陆用户的 Hash ID 时，不需要 携带 当前用户的 身份 Cookie.
+        url = "http://www.zhihu.com/people/%s" % token
+        import urllib2
+        req = urllib2.urlopen(url)
+        res = req.read()
+        DOM = BeautifulSoup(res, 'html.parser')
+        hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
+        return hash_id
+
     def parse(self):
         DOM = BeautifulSoup(self.html, 'html.parser')
         el = DOM.find("div", class_="zm-profile-header")
@@ -350,10 +360,10 @@ class People:
         try:
             self.hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
         except:
-            Logging.warn(u"提取 用户哈希编号(hash_id)失败")
-            Logging.debug(u"在获取自己（即当前登陆 Session用户 ）的页面时，将无法找到 用户的哈希编号, 请尝试使用另外的Session来请求该页面。")
-            self.hash_id = ""
-            sys.exit()
+            # Logging.warn(u"提取 用户哈希编号(hash_id)失败")
+            # Logging.debug(u"在获取自己（即当前登陆 Session用户 ）的页面时，将无法找到 用户的哈希编号, 请尝试使用另外的Session来请求该页面。")
+            self.hash_id = self._fetch_user_hash_id(token=self.token)
+            
 
         # followers | followees ( 该用户关注的人 以及 关注该用户的人 )
         f_el = DOM.find("div", class_="zm-profile-side-following").find_all("strong")
@@ -1837,7 +1847,7 @@ def test_question():
     q.parse()
 
 def test_people():
-    token = "gejinyuban"
+    token = "luo-zi-jun"
     p = People(token=token)
     p.pull()
     p.parse()
