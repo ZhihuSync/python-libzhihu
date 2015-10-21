@@ -40,43 +40,7 @@ except:
 
 
 class People:
-    """
-        people:
-            name
-            domain
-            avatar
-            profile
-                location
-                    name
-                sex
-                job
-                    industry
-                    organization
-                    job
-                education
-                    organization
-                    major
-                SNS
-                about
-            detail:
-                chengjiu
-                    agree, thx, favor, share
-                zhiyejingli
-
-            questions
-
-            answers
-
-            articles
-
-            favors
-
-            edit
-
-            forces
-            follows
-
-    """
+    "用户"
     def __init__(self, token=None):
         self.token = token
         """
@@ -241,9 +205,26 @@ class People:
                     Logging.warn(p)
             offset += len(result)
         return followers
-    def _fetch_followed_by_columns(self, total):
+    def _fetch_followed_by_columns(self):
         # 获取该用户关注的专栏
-        # http://www.zhihu.com/people/leng-zhe/columns/followed
+        def fetch_total():
+            url = "http://www.zhihu.com/people/%s/columns/followed" % self.token
+            r = requests.get(url)
+            if r.status_code != 200:
+                Logging.warn(u"HTTP CODE: %d" % r.status_code)
+                return 0
+            """
+                <span class="zm-profile-section-name"><a href="/people/ma-qian-zu">马前卒</a> 关注的专栏（0）</span>
+            """
+            DOM = BeautifulSoup(r.content, 'html.parser')
+            text = re.sub("^\n+|\n+$", "", DOM.find("span", class_="zm-profile-section-name").get_text())
+            total = re.compile(r"\d+", re.DOTALL).findall(text)[-1]
+            return int(total)
+
+        total = fetch_total()
+
+        Logging.info(u"该用户关注的专栏数量: %d" % total)
+
         url = "http://www.zhihu.com/node/ProfileFollowedColumnsListV2"
         """
             HTTP POST
@@ -251,6 +232,56 @@ class People:
                 params:{"offset":20,"limit":20,"hash_id":"cfd6c460ccfe5e87a75a5410bbf0ae65"}
                 _xsrf:f11a7023d52d5a0ec95914ecff30885f
         """
+        offset = 0
+        limit  = 20
+        hash_id = self.hash_id
+        _xsrf   = self.xsrf
+
+        columns = []
+
+        while offset < total:
+            params = {"offset":offset,"limit":limit,"hash_id":hash_id}
+            data = {"method": "next", "params": json.dumps(params), "_xsrf": _xsrf }
+            Logging.info(u"开始下载该用户关注的专栏: %s" % json.dumps(data) )
+            r = requests.post(url, data=data)
+            if r.status_code != 200:
+                Logging.warn(u"HTTP CODE : %d" % r.status_code)
+            else:
+                """
+                    <div class="zm-profile-section-item zg-clear">
+                        <a class="zm-list-avatar-link" href="http://zhuanlan.zhihu.com/iprlawyer" target="_blank">
+                            <img class="zm-list-avatar-medium" src="http://pic1.zhimg.com/abe2ebea0_l.jpg"> 
+                        </a>
+                        <div class="zm-profile-section-main">
+                            <button data-follow="c:button" class="zg-right zg-btn zg-btn-follow" id=":c-802">关注</button> 
+                            <a href="http://zhuanlan.zhihu.com/iprlawyer" target="_blank"><strong>大邦知识产权评论</strong></a> 
+                            <div class="description">大邦律师为您细说知识产权。</div> 
+                            <div class="meta"> <span class="zg-gray">38 篇文章</span> </div> 
+                        </div>
+                    </div>
+                """
+                try:
+                    body = json.loads(r.content)
+                    if body['r'] == 0 and type(body['msg']) == type([]):
+                        result = body['msg']
+                    else:
+                        Logging.error(u"数据格式错误")
+                        Logging.debug(body)
+                        result = []
+                    for i in result:
+                        token = re.compile(r"zhuanlan\.zhihu\.com\/(\S+)\"|\'", re.DOTALL).findall(i)[0]
+                        title = re.compile(r"strong\>(.*?)\<\/strong\>", re.DOTALL).findall(i)[0]
+
+                        columns.append( {"token": token, "title": title} )
+
+                    offset += len(result)
+
+                except Exception as e:
+                    Logging.error(u"JSON解析失败")
+                    Logging.debug(e)
+                    Logging.debug(r.content)
+        return columns
+
     def _fetch_posts(self, total):
         # 获取该用户的专栏文章
         pass
@@ -319,9 +350,12 @@ class People:
         try:
             self.hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
         except:
+            Logging.warn(u"提取 用户哈希编号(hash_id)失败")
+            Logging.debug(u"在获取自己（即当前登陆 Session用户 ）的页面时，将无法找到 用户的哈希编号, 请尝试使用另外的Session来请求该页面。")
             self.hash_id = ""
+            sys.exit()
 
-
+        # followers | followees ( 该用户关注的人 以及 关注该用户的人 )
         f_el = DOM.find("div", class_="zm-profile-side-following").find_all("strong")
         if len(f_el) < 2:
             followees_num = 0
@@ -333,10 +367,14 @@ class People:
             # 关注该用户的人 followers
             followers_num = int(f_el[1].string.replace("\n", ""))
             followers = self._fetch_followers(followers_num)
+            # followers = []  # NOTE: 该数量可能特别多，在调试开发阶段，暂时屏蔽该请求。
 
-        print followers
+        
+
+
         # 关注的专栏
-
+        columns = self._fetch_followed_by_columns()
+        
         # 关注的话题
 
         el = DOM.find("div", class_="zm-profile-section-list")
@@ -358,7 +396,9 @@ class People:
 
         # 教育经历
 
-
+        print u"关注该用户的人: ", followers
+        print u"该用户关注的人: ", followees
+        print u"该用户关注的专栏: ", columns
 
     @staticmethod
     def search(keywords=""):
@@ -1797,7 +1837,7 @@ def test_question():
     q.parse()
 
 def test_people():
-    token = "rio"
+    token = "gejinyuban"
     p = People(token=token)
     p.pull()
     p.parse()
@@ -1834,11 +1874,11 @@ def test_roundtable():
 
 def test():
     # test_question()
-    # test_people()
+    test_people()
     # test_explore()
     # test_search()
     # test_collection()
-    test_roundtable()
+    # test_roundtable()
 
 if __name__ == '__main__':
     test()
