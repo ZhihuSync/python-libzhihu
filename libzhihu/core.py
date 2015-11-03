@@ -5,9 +5,13 @@
 import os, sys, time, platform, random
 import re, json, cookielib
 
+# import thread, threading
+# from multiprocessing.dummy import Pool as ThreadPool
+
 # requirements
-import requests, termcolor, html2text
-import requests_cache
+import requests, termcolor
+# import html2text
+# import requests_cache
 try:
     from bs4 import BeautifulSoup
 except:
@@ -16,6 +20,9 @@ except:
 # module
 from auth import islogin
 from auth import Logging
+
+# 数据库
+import model
 
 """
     Note:
@@ -72,8 +79,33 @@ class People:
         except Exception as e:
             Logging.error(u"XSRF值提取失败")
             Logging.debug(e)
-    def sync(self):
-        pass
+    def sync(self, people=None):
+        if people == None:
+            people = self.parse()
+            new_people = {
+                "uuid": people['uuid'], 
+                "token": people['token'],
+                "name": people['name'],
+                "avatar": people['avatar'],
+                "gender": people['gender'],
+                "bio": people['bio'],
+                "sns": people['sns'],
+                "descp": people['descp'],
+            }
+        try:
+            person = model.People(**new_people)
+            model.session.add(person)
+            model.session.commit()
+            Logging.info(u"用户 %s 的资料已经同步。" % person['name'])
+        except:
+            Logging.info(u"数据库写入失败。")
+        
+        for token in (people['followers'] + people['followees']):
+            print "Begin: token: %s" % token
+            p = People(token=token)
+            p.pull()
+            p.sync()
+
     def _fetch_followees(self, total):
         # 获取 该用户关注的人
         # http://www.zhihu.com/people/leng-zhe/followees
@@ -131,13 +163,26 @@ class People:
                 Logging.error(u"数据格式解析失败")
                 Logging.debug(e)
                 result = []
+            # _ff = []
             for p in result:
                 r = re.compile(r"\/people/(\S+)\"|\'", re.DOTALL).findall(p)
                 if len(r) > 0:
+                    # thread.start_new_thread(sync_people, (r[0], ))
+                    # _t = MyThread("people_token_"+r[0], r[0])
+                    # _t.start()
+                    # _t.join()
+                    # p = People(token=r[0])
+                    # p.pull()
+                    # p.sync()
+
                     followees.append(r[0])
+                    # _ff.append(r[0])
+
                 else:
                     Logging.warn(u"提取用户token失败")
                     Logging.warn(p)
+            # pool.map(sync_people, _ff)
+
             offset += len(result)
         return followees
 
@@ -196,13 +241,25 @@ class People:
                 Logging.error(u"数据格式解析失败")
                 Logging.debug(e)
                 result = []
+            # _ff = []
             for p in result:
                 r = re.compile(r"\/people/(\S+)\"|\'", re.DOTALL).findall(p)
                 if len(r) > 0:
+                    # thread.start_new_thread(sync_people, (r[0], ))
+                    # _t = MyThread("people_token_"+r[0], r[0])
+                    # _t.start()
+                    # _t.join()
+                    # p = People(token=r[0])
+                    # p.pull()
+                    # p.sync()
+
                     followers.append(r[0])
+                    # _ff.append(r[0])
                 else:
                     Logging.warn(u"提取用户token失败")
                     Logging.warn(p)
+            # pool.map(sync_people, _ff)
+
             offset += len(result)
         return followers
     def _fetch_followed_by_columns(self):
@@ -354,8 +411,15 @@ class People:
         el = DOM.find("div", class_="zm-profile-header")
         elem = el.find("div", class_="title-section")
         # Name, Bio ( 一句话介绍自己？ )
-        name = re.sub("^\n+|\n+$", "", elem.find("a", class_="name").get_text())
-        bio = re.sub("^\n+|\n+$", "", elem.find("span", class_="bio").get_text())
+        try:
+            name = re.sub("^\n+|\n+$", "", elem.find("a", class_="name").get_text())
+        except:
+            name = ""
+        try:
+            bio = re.sub("^\n+|\n+$", "", elem.find("span", class_="bio").get_text())
+        except:
+            bio = ""
+
         # SNS Info ( Weibo | QQ | ... )
         sns = {"weibo": ""}
         wb_el = el.find("div", class_="top").find("div", class_="weibo-wrap")
@@ -366,8 +430,11 @@ class People:
         # avatar
         avatar = el.find("div", class_="body").find("img", class_="avatar")['src']
         # descp
-        descp = re.sub("^\n+|\n+$", "", \
+        try:
+            descp = re.sub("^\n+|\n+$", "", \
                     el.find("div", class_="body").find("span", class_="description").find("span", class_="content").get_text() )
+        except:
+            descp = ""
         # Hash ID
         try:
             self.hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
@@ -412,8 +479,9 @@ class People:
                     # 性别查找
                     if el.find("span", class_="icon-profile-female"): gender = "female"
                     elif el.find("span", class_="icon-profile-male"): gender = "male"
-                except:
-                    pass
+                except Exception as e:
+                    Logging.error(u"性别信息解析错误")
+                    Logging.debug(e)
             elif el['data-name'] == "employment":
                 # 职业信息
                 try:
@@ -455,7 +523,8 @@ class People:
             # followers = []  # NOTE: 该数量可能特别多，在调试开发阶段，暂时屏蔽该请求。
 
         # 关注的专栏
-        columns = self._fetch_followed_by_columns()
+        # columns = self._fetch_followed_by_columns()
+        columns = []
         
         # 关注的话题
 
@@ -502,7 +571,6 @@ class People:
             "followers": followers,
             "columns": columns
         }
-        print data
         return data
     @staticmethod
     def search(keywords=""):
@@ -1345,7 +1413,7 @@ class Topic:
     def questions(self):
         # 全部问题
         pass
-    def parser(self, html):
+    def parse(self, html):
         pass
     def export(self, format="rst"):
         pass
@@ -1944,10 +2012,10 @@ def test_question():
     q.parse()
 
 def test_people():
-    token = "rio"
+    token = "song-ling-shi-liao-88-24"
     p = People(token=token)
     p.pull()
-    p.parse()
+    p.sync()
 
 def test_explore():
     e = Explore()
