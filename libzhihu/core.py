@@ -333,16 +333,29 @@ class People:
         DOM = BeautifulSoup(res, 'html.parser')
         hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
         return hash_id
-
+    def _p_item(self, e):
+        result = {"name": "", "token": "", "id": 0} # token/id 为 topic id/token
+        if e.find("a") != None: e = e.find("a")
+        try:
+            result['name'] = e['title']
+        except:
+            pass
+        try:
+            result['token'] = e['data-token']
+        except:
+            pass
+        try:
+            result['id'] = int(e['data-topicid'])
+        except:
+            result['id'] = 0
+        return result
     def parse(self):
         DOM = BeautifulSoup(self.html, 'html.parser')
         el = DOM.find("div", class_="zm-profile-header")
         elem = el.find("div", class_="title-section")
         # Name, Bio ( 一句话介绍自己？ )
-        name = elem.find("a", class_="name").get_text()
-        name = re.sub("^\n+|\n+$", "", name)
-        bio = elem.find("span", class_="bio").get_text()
-        bio = re.sub("^\n+|\n+$", "", bio)
+        name = re.sub("^\n+|\n+$", "", elem.find("a", class_="name").get_text())
+        bio = re.sub("^\n+|\n+$", "", elem.find("span", class_="bio").get_text())
         # SNS Info ( Weibo | QQ | ... )
         sns = {"weibo": ""}
         wb_el = el.find("div", class_="top").find("div", class_="weibo-wrap")
@@ -353,9 +366,8 @@ class People:
         # avatar
         avatar = el.find("div", class_="body").find("img", class_="avatar")['src']
         # descp
-        descp = el.find("div", class_="body").find("span", class_="description").find("span", class_="content").get_text()
-        descp = re.sub("^\n+|\n+$", "", descp)
-
+        descp = re.sub("^\n+|\n+$", "", \
+                    el.find("div", class_="body").find("span", class_="description").find("span", class_="content").get_text() )
         # Hash ID
         try:
             self.hash_id = DOM.find("div", class_="zm-profile-header-op-btns").find("button")['data-id']
@@ -363,7 +375,69 @@ class People:
             # Logging.warn(u"提取 用户哈希编号(hash_id)失败")
             # Logging.debug(u"在获取自己（即当前登陆 Session用户 ）的页面时，将无法找到 用户的哈希编号, 请尝试使用另外的Session来请求该页面。")
             self.hash_id = self._fetch_user_hash_id(token=self.token)
-            
+
+        try:
+            elems = el.find("div", class_="zm-profile-header-user-describe").find("div", class_="items").children
+        except:
+            Logging.warn(u"用户职业教育位置信息解析失败.")
+            elems = []
+        # info
+        location = {"name": "", "token": "", "id": 0} # 当前位置信息也可以和 Topic 关联, id 和 token 均为 topic id/token 
+        business = {"name": "", "token": "", "id": 0} # 所处行业
+        employment = {"name": "", "token": "", "id": 0}
+        position   = {"name": "", "token": "", "id": 0}
+        school     = {"name": "", "token": "", "id": 0}
+        profession = {"name": "", "token": "", "id": 0}
+        
+        gender = ""
+
+        for el in elems:
+            try:
+                el['data-name']
+            except:
+                el = {"data-name": "shit"}
+            if el['data-name'] == "location":
+                # 获取当前位置
+                try:
+                    location = self._p_item(el.find("span", class_="location"))
+                except Exception as e:
+                    Logging.error(u"位置信息解析错误")
+                    Logging.debug(e)
+                # 行业
+                try:
+                    business = self._p_item(el.find("span", class_="business"))
+                except:
+                    pass
+                try:
+                    # 性别查找
+                    if el.find("span", class_="icon-profile-female"): gender = "female"
+                    elif el.find("span", class_="icon-profile-male"): gender = "male"
+                except:
+                    pass
+            elif el['data-name'] == "employment":
+                # 职业信息
+                try:
+                    employment = self._p_item(el.find("span", class_="employment"))
+                except:
+                    pass
+                try:
+                    position = self._p_item(el.find("span", class_="position"))
+                except:
+                    pass
+            elif el['data-name'] == "education":
+                # 教育信息
+                try:
+                    school = self._p_item(el.find("span", class_="education"))
+                except:
+                    pass
+                try:
+                    profession = self._p_item(el.find("span", class_="education-extra"))
+                except:
+                    pass
+            else:
+                # unknow ...
+                Logging.warn(u"unknow section.")
+
 
         # followers | followees ( 该用户关注的人 以及 关注该用户的人 )
         f_el = DOM.find("div", class_="zm-profile-side-following").find_all("strong")
@@ -374,6 +448,7 @@ class People:
             # 该用户关注的人 followees
             followees_num = int(f_el[0].string.replace("\n", ""))
             followees = self._fetch_followees(followees_num)
+            # followees = []
             # 关注该用户的人 followers
             followers_num = int(f_el[1].string.replace("\n", ""))
             followers = self._fetch_followers(followers_num)
@@ -405,11 +480,32 @@ class People:
         # 居住信息
 
         # 教育经历
+        data = {
+            "uuid": self.hash_id,
+            "token": self.token,
+            "name": name,
+            "gender": gender,
+            "location": location,
+            "business": business,
+            "company": {
+                "employment": employment,
+                "position": position
+            },
+            "education": {
+                "school": school,
+                "profession": profession
+            },
+            "avatar": avatar,
+            "bio": bio,
+            "sns": sns,
+            "descp": descp,
 
-        print u"关注该用户的人: ", followers
-        print u"该用户关注的人: ", followees
-        print u"该用户关注的专栏: ", columns
-
+            "followees": followees,
+            "followers": followers,
+            "columns": columns
+        }
+        print data
+        return data
     @staticmethod
     def search(keywords=""):
         url = "http://www.zhihu.com/r/search"
@@ -1799,7 +1895,7 @@ class Message:
         elif res.status_code != 200:
             raise IOError("unknow err.or.")
         else:
-            # res.content | res.text 
+            # res.content | res.text
             self.html = res.content
     def sync(self):
         pass
@@ -1838,6 +1934,9 @@ class Siri:
         pass
 
 
+"""
+    Test 
+"""
 def test_question():
     # token = "35564122"
     token = "31272454"
@@ -1847,7 +1946,7 @@ def test_question():
     q.parse()
 
 def test_people():
-    token = "luo-zi-jun"
+    token = "rio"
     p = People(token=token)
     p.pull()
     p.parse()
