@@ -454,9 +454,6 @@ class People:
             followers = self._fetch_followers(followers_num)
             # followers = []  # NOTE: 该数量可能特别多，在调试开发阶段，暂时屏蔽该请求。
 
-        
-
-
         # 关注的专栏
         columns = self._fetch_followed_by_columns()
         
@@ -499,6 +496,7 @@ class People:
             "bio": bio,
             "sns": sns,
             "descp": descp,
+            "reputation": reputation, # 成就 信息
 
             "followees": followees,
             "followers": followers,
